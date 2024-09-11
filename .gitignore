@@ -1,0 +1,28 @@
+# generated
+**/node_modules
+ts-tests/src/@codegen/jup-perps
+.cargo
+
+# production
+/build
+ts-tests/dist
+.env
+.env.production
+.env.devnet
+.env.mainnet-beta
+
+# misc
+id.json
+
+.idea/
+
+test-ledger/
+yarn-error.log
+tmp
+
+helm/charts
+liquidator.json
+target/
+
+/config/routing_config.json
+rust_liquidator.json

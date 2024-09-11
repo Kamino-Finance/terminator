@@ -1,0 +1,57 @@
+name: Rust
+
+on:
+  push:
+    branches:
+      - master
+      - 'release/**'
+  pull_request:
+    branches:
+      - master
+      - 'release/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
+
+jobs:
+  rust_fmt_and_test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: install essential
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config build-essential libudev-dev
+      - uses: dtolnay/rust-toolchain@1.73.0
+        with:
+          components: clippy
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rustfmt
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "ts-tests"
+      - name: Set up SSH keys
+        uses: webfactory/ssh-agent@v0.7.0
+        with:
+          # Use hubbleprotocolbot's key:
+          # - docker+cargo fails when mounting multiple keys (https://github.com/docker/buildx/issues/341)
+          # - GitHub does not support reusing deploy keys
+          ssh-private-key: |
+            ${{ secrets.HUBBLEPROTOCOLBOT_GITHUB_KEY }}
+      - uses: actions-rs/cargo@v1
+        name: Rust format
+        with:
+          toolchain: nightly
+          command: fmt
+          args: --all -- --check
+      - uses: actions-rs/clippy-check@v1
+        name: Clippy
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          args: --all -- --deny warnings
+      - name: Cargo test
+        run: |
+          cargo test
