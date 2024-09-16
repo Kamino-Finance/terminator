@@ -13,7 +13,7 @@ use solana_sdk::{
     signer::Signer,
 };
 use tokio::time::sleep;
-use tracing::info;
+use tracing::{info, warn};
 use tracing_subscriber::filter::EnvFilter;
 
 use crate::{
@@ -438,7 +438,10 @@ pub mod swap {
         let tx = builder.build(&[]).await?;
 
         info!("Sending transaction...");
-        let (sig, _) = klend_client.client.send_and_confirm_transaction(tx).await?;
+        let (sig, _) = klend_client
+            .client
+            .send_retry_and_confirm_transaction(tx, None, false)
+            .await?;
         info!("Executed transaction: {:?}", sig);
 
         Ok(())
@@ -634,7 +637,7 @@ async fn liquidate(klend_client: &KlendClient, obligation: &Pubkey) -> Result<()
         if should_send {
             let sig = klend_client
                 .client
-                .send_and_confirm_transaction(txn)
+                .send_retry_and_confirm_transaction(txn, None, false)
                 .await
                 .unwrap();
 
@@ -664,9 +667,6 @@ async fn crank(klend_client: &KlendClient, obligation_filter: Option<Pubkey>) ->
         for market in &markets {
             info!("{} cranking market", market.to_string().green());
             let st = std::time::Instant::now();
-            let clock = sysvars::get_clock(&klend_client.client.client)
-                .await
-                .unwrap();
 
             let start = std::time::Instant::now();
 
@@ -703,6 +703,10 @@ async fn crank(klend_client: &KlendClient, obligation_filter: Option<Pubkey>) ->
             let switchboard_feed_infos = map_accounts_and_create_infos(&mut switchboard_accounts);
             let scope_price_infos = map_accounts_and_create_infos(&mut scope_price_accounts);
 
+            let clock = sysvars::get_clock(&klend_client.client.client)
+                .await
+                .unwrap();
+
             // Refresh all reserves first
             for (key, reserve) in reserves.iter_mut() {
                 info!(
@@ -718,16 +722,22 @@ async fn crank(klend_client: &KlendClient, obligation_filter: Option<Pubkey>) ->
                 if ignore_tokens.contains(&reserve.config.token_info.symbol()) {
                     continue;
                 }
-                operations::refresh_reserve(
-                    key,
-                    reserve,
-                    &lending_market,
-                    &clock,
-                    &pyth_account_infos,
-                    &switchboard_feed_infos,
-                    &scope_price_infos,
-                )
-                .unwrap();
+                if let Err(e) = reserve.last_update.slots_elapsed(clock.slot) {
+                    warn!(err = ?e,
+                        "RESERVE {:?} last updated slot is already ahead of the clock, skipping refresh",
+                        key,
+                    );
+                } else {
+                    operations::refresh_reserve(
+                        key,
+                        reserve,
+                        &lending_market,
+                        &clock,
+                        &pyth_account_infos,
+                        &switchboard_feed_infos,
+                        &scope_price_infos,
+                    )?;
+                }
             }
 
             // Refresh all obligations second

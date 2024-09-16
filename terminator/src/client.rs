@@ -250,7 +250,9 @@ impl KlendClient {
 
         let txn = self.client.create_tx(&[create_lookup_table], &[]).await?;
 
-        self.client.send_and_confirm_transaction(txn).await?;
+        self.client
+            .send_retry_and_confirm_transaction(txn, None, false)
+            .await?;
 
         let keys = keys
             .iter()
@@ -304,7 +306,10 @@ impl KlendClient {
             if num_retries > max_retries {
                 return Err(anyhow!("Max retries reached"));
             }
-            let (sig, res) = self.client.send_and_confirm_transaction(tx.clone()).await?;
+            let (sig, res) = self
+                .client
+                .send_retry_and_confirm_transaction(tx.clone(), None, false)
+                .await?;
             if let Some(Err(TransactionError::BlockhashNotFound)) = res {
                 continue;
             } else {
