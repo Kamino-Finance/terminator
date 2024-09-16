@@ -438,7 +438,10 @@ pub mod swap {
         let tx = builder.build(&[]).await?;
 
         info!("Sending transaction...");
-        let (sig, _) = klend_client.client.send_and_confirm_transaction(tx).await?;
+        let (sig, _) = klend_client
+            .client
+            .send_retry_and_confirm_transaction(tx, None, false)
+            .await?;
         info!("Executed transaction: {:?}", sig);
 
         Ok(())
@@ -634,7 +637,7 @@ async fn liquidate(klend_client: &KlendClient, obligation: &Pubkey) -> Result<()
         if should_send {
             let sig = klend_client
                 .client
-                .send_and_confirm_transaction(txn)
+                .send_retry_and_confirm_transaction(txn, None, false)
                 .await
                 .unwrap();
 

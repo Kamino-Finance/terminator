@@ -216,7 +216,10 @@ pub async fn unwrap_wsol_ata(klend_client: &KlendClient) -> Result<String> {
         .build(&[])
         .await?;
 
-    let (sig, _) = klend_client.client.send_and_confirm_transaction(tx).await?;
+    let (sig, _) = klend_client
+        .client
+        .send_retry_and_confirm_transaction(tx, None, false)
+        .await?;
 
     info!("Executed unwrap transaction: {:?}", sig);
     Ok(sig.to_string())
